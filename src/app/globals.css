@@ -55,7 +55,8 @@ a { color: inherit; text-decoration: none; }
 .choice-list strong { display: block; font-size: 16px; }
 .choice-list small { display: block; margin-top: 5px; color: var(--muted); font-size: 12px; line-height: 1.35; }
 .choice-list i { color: var(--muted); font-style: normal; }
-.choice-icon, .exchange-icon { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 12px; background: var(--soft); font-weight: 800; }
+.choice-icon, .exchange-icon, .wallet-letter { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 12px; background: var(--soft); font-weight: 800; }
+.wallet-letter { color: white; background: var(--ink); font-size: 15px; }
 .choice-icon.paste { background: var(--accent); }
 .choice-icon.browser { background: var(--lilac); }
 .choice-icon.exchange { background: var(--peach); }

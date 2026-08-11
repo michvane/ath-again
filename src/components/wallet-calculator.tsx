@@ -1,10 +1,16 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { getWallets } from "@wallet-standard/app";
+import type { Wallet, WalletAccount } from "@wallet-standard/base";
 import type { PortfolioResponse } from "@/lib/types";
 
-type Flow = "choose" | "paste" | "exchange" | "credentials";
+type Flow = "choose" | "wallets" | "paste" | "exchange" | "credentials";
 type Exchange = "bitvavo" | "binance";
+type Eip1193Provider = { request(args: { method: string; params?: unknown[] }): Promise<unknown> };
+type Eip6963Provider = { info: { uuid: string; name: string; icon: string; rdns: string }; provider: Eip1193Provider };
+type BrowserWallet = { id: string; name: string; evm?: Eip6963Provider; solana?: Wallet };
+type StandardConnect = { connect(input?: { silent?: boolean }): Promise<{ accounts: readonly WalletAccount[] }> };
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 const price = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 4 });
@@ -20,6 +26,33 @@ function shortAddress(address: string) {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
 }
 
+async function discoverInjectedWallets(): Promise<BrowserWallet[]> {
+  const evmProviders = new Map<string, Eip6963Provider>();
+  const receiveProvider = (event: Event) => {
+    const detail = (event as CustomEvent<Eip6963Provider>).detail;
+    if (detail?.info?.uuid && detail.provider) evmProviders.set(detail.info.uuid, detail);
+  };
+  window.addEventListener("eip6963:announceProvider", receiveProvider);
+  window.dispatchEvent(new Event("eip6963:requestProvider"));
+  const standardWallets = getWallets();
+  await new Promise((resolve) => window.setTimeout(resolve, 350));
+  window.removeEventListener("eip6963:announceProvider", receiveProvider);
+
+  const merged = new Map<string, BrowserWallet>();
+  for (const detail of evmProviders.values()) {
+    const key = detail.info.name.trim().toLowerCase();
+    merged.set(key, { id: `evm:${detail.info.uuid}`, name: detail.info.name, evm: detail });
+  }
+  for (const wallet of standardWallets.get()) {
+    if (!wallet.chains.some((chain) => chain.startsWith("solana:"))) continue;
+    if (!("standard:connect" in wallet.features)) continue;
+    const key = wallet.name.trim().toLowerCase();
+    const existing = merged.get(key);
+    merged.set(key, { id: existing?.id || `solana:${wallet.name}`, name: wallet.name, evm: existing?.evm, solana: wallet });
+  }
+  return [...merged.values()].sort((a, b) => Number(Boolean(b.evm && b.solana)) - Number(Boolean(a.evm && a.solana)) || a.name.localeCompare(b.name));
+}
+
 export function WalletCalculator() {
   const [flow, setFlow] = useState<Flow>("choose");
   const [exchange, setExchange] = useState<Exchange | null>(null);
@@ -29,6 +62,7 @@ export function WalletCalculator() {
   const [result, setResult] = useState<PortfolioResponse | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [browserWallets, setBrowserWallets] = useState<BrowserWallet[]>([]);
 
   function navigate(next: Flow) {
     setFlow(next);
@@ -42,10 +76,11 @@ export function WalletCalculator() {
     setApiKey("");
     setSecret("");
     setResult(null);
+    setBrowserWallets([]);
     setError("");
   }
 
-  async function requestPortfolio(endpoint: string, body: Record<string, string>) {
+  async function requestPortfolio(endpoint: string, body: Record<string, string | undefined>) {
     setLoading(true);
     setError("");
 
@@ -79,35 +114,68 @@ export function WalletCalculator() {
     setSecret("");
   }
 
-  async function connectWallet() {
-    if (!window.ethereum) {
-      setError("No compatible EVM wallet was found. You can paste its public address instead.");
-      return;
-    }
+  async function findBrowserWallets() {
+    setLoading(true);
+    setError("");
     try {
-      const accounts = await window.ethereum.request({ method: "eth_requestAccounts" }) as string[];
-      const connected = accounts[0];
-      if (!connected) throw new Error("No account was shared by the wallet.");
-      setAddress(connected);
-      await requestPortfolio("/api/portfolio", { address: connected });
+      const discovered = await discoverInjectedWallets();
+      if (!discovered.length) throw new Error("No compatible browser wallet was found. You can paste a public address instead.");
+      setBrowserWallets(discovered);
+      navigate("wallets");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "We couldn’t discover your browser wallets.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function connectWallet(wallet: BrowserWallet) {
+    setLoading(true);
+    setError("");
+    try {
+      let ethereumAddress: string | undefined;
+      let solanaAddress: string | undefined;
+      const connectionErrors: Error[] = [];
+      if (wallet.evm) {
+        try {
+          const accounts = await wallet.evm.provider.request({ method: "eth_requestAccounts" }) as string[];
+          ethereumAddress = accounts[0];
+        } catch (caught) {
+          connectionErrors.push(caught instanceof Error ? caught : new Error("The EVM account was not shared."));
+        }
+      }
+      if (wallet.solana) {
+        try {
+          const feature = wallet.solana.features["standard:connect"] as StandardConnect;
+          const connected = await feature.connect();
+          solanaAddress = connected.accounts.find((account) => account.chains.some((chain) => chain.startsWith("solana:")))?.address;
+        } catch (caught) {
+          connectionErrors.push(caught instanceof Error ? caught : new Error("The Solana account was not shared."));
+        }
+      }
+      if (!ethereumAddress && !solanaAddress) throw connectionErrors[0] || new Error("No supported account was shared by the wallet.");
+      await requestPortfolio("/api/portfolio", { ethereumAddress, solanaAddress });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Wallet connection was cancelled.");
+      setLoading(false);
     }
   }
 
   if (result) {
     const walletResult = result.source.kind === "wallet";
+    const multichainResult = result.source.provider === "multichain";
+    const ethereumOnly = result.source.provider === "ethereum";
     return (
       <section className="results" id="results" aria-live="polite">
         <div className="results-heading">
           <div>
-            <span className="overline">{walletResult ? `Ethereum · ${shortAddress(result.address)}` : result.source.label}</span>
-            <h2>{walletResult ? "Your Ethereum ATH estimate" : "Your portfolio at all-time highs"}</h2>
+            <span className="overline">{multichainResult ? "Connected wallet · multichain" : walletResult ? `Ethereum · ${shortAddress(result.address)}` : result.source.label}</span>
+            <h2>Your portfolio at all-time highs</h2>
           </div>
           <button className="text-button" type="button" onClick={reset}>Check another portfolio</button>
         </div>
 
-        {walletResult ? (
+        {ethereumOnly ? (
           <div className="scope-note">
             <span>Ethereum only</span>
             <p>This is the subtotal for the connected Ethereum address. Phantom balances on Solana, HyperEVM, Bitcoin, Base, Polygon, and other networks are not included yet.</p>
@@ -116,7 +184,7 @@ export function WalletCalculator() {
 
         <div className="summary-grid">
           <article>
-            <span>{walletResult ? "On Ethereum today" : "Value today"}</span>
+            <span>{ethereumOnly ? "On Ethereum today" : "Value today"}</span>
             <strong>{money.format(result.totals.current)}</strong>
           </article>
           <article className="highlight">
@@ -137,10 +205,10 @@ export function WalletCalculator() {
             <span>Asset</span><span>Holdings</span><span>Price now</span><span>ATH value</span>
           </div>
           {result.assets.map((asset) => (
-            <div className="asset-row" role="row" key={asset.id}>
+            <div className="asset-row" role="row" key={`${asset.chain || result.source.provider}:${asset.id}`}>
               <div className="token" role="cell">
                 <span className="token-icon">{asset.symbol.slice(0, 2)}</span>
-                <span className="token-name">{asset.name}<small>{asset.symbol}</small></span>
+                <span className="token-name">{asset.name}<small>{asset.symbol}{asset.chain ? ` · ${asset.chain}` : ""}</small></span>
               </div>
               <span className="number" role="cell"><i>Holdings</i>{quantity.format(asset.amount)}</span>
               <span className="number" role="cell"><i>Price now</i>{formatPrice(asset.currentPrice)}</span>
@@ -163,9 +231,9 @@ export function WalletCalculator() {
               <span><strong>Paste a wallet address</strong><small>Instant. No connection needed.</small></span>
               <i aria-hidden="true">→</i>
             </button>
-            <button type="button" disabled={loading} onClick={connectWallet}>
+            <button type="button" disabled={loading} onClick={findBrowserWallets}>
               <span className="choice-icon browser" aria-hidden="true">↗</span>
-              <span><strong>{loading ? "Connecting…" : "Connect an Ethereum wallet"}</strong><small>Reads the active Ethereum address only.</small></span>
+              <span><strong>{loading ? "Finding wallets…" : "Connect a browser wallet"}</strong><small>Ethereum, Solana, and HyperEVM.</small></span>
               <i aria-hidden="true">→</i>
             </button>
             <button type="button" onClick={() => navigate("exchange")}>
@@ -173,6 +241,24 @@ export function WalletCalculator() {
               <span><strong>Connect an exchange</strong><small>Bitvavo or Binance.</small></span>
               <i aria-hidden="true">→</i>
             </button>
+          </div>
+          {error ? <p className="form-error" role="alert">{error}</p> : null}
+        </div>
+      ) : null}
+
+      {flow === "wallets" ? (
+        <div className="flow-step">
+          <button className="back-button" type="button" onClick={() => navigate("choose")}>← Back</button>
+          <h2>Choose your wallet</h2>
+          <p className="step-copy">We’ll combine every supported account this wallet shares.</p>
+          <div className="choice-list compact">
+            {browserWallets.map((wallet) => (
+              <button key={wallet.id} type="button" disabled={loading} onClick={() => connectWallet(wallet)}>
+                <span className="wallet-letter" aria-hidden="true">{wallet.name.slice(0, 1)}</span>
+                <span><strong>{wallet.name}</strong><small>{[wallet.evm ? "Ethereum + HyperEVM" : "", wallet.solana ? "Solana" : ""].filter(Boolean).join(" · ")}</small></span>
+                <i aria-hidden="true">→</i>
+              </button>
+            ))}
           </div>
           {error ? <p className="form-error" role="alert">{error}</p> : null}
         </div>
@@ -239,10 +325,4 @@ export function WalletCalculator() {
       ) : null}
     </section>
   );
-}
-
-declare global {
-  interface Window {
-    ethereum?: { request(args: { method: string; params?: unknown[] }): Promise<unknown> };
-  }
 }

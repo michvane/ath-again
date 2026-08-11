@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getPortfolio } from "@/lib/portfolio";
+import { getConnectedPortfolio, getPortfolio } from "@/lib/portfolio";
 
 const ETHEREUM_ADDRESS = /^0x[a-fA-F0-9]{40}$/;
+const SOLANA_ADDRESS = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -10,6 +11,22 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const address = typeof body.address === "string" ? body.address.trim() : "";
+    const ethereumAddress = typeof body.ethereumAddress === "string" ? body.ethereumAddress.trim() : "";
+    const solanaAddress = typeof body.solanaAddress === "string" ? body.solanaAddress.trim() : "";
+
+    if (ethereumAddress || solanaAddress) {
+      if (ethereumAddress && !ETHEREUM_ADDRESS.test(ethereumAddress)) {
+        return NextResponse.json({ error: "The wallet returned an invalid Ethereum address." }, { status: 400 });
+      }
+      if (solanaAddress && !SOLANA_ADDRESS.test(solanaAddress)) {
+        return NextResponse.json({ error: "The wallet returned an invalid Solana address." }, { status: 400 });
+      }
+      const portfolio = await getConnectedPortfolio({
+        ethereum: ethereumAddress || undefined,
+        solana: solanaAddress || undefined,
+      });
+      return NextResponse.json(portfolio, { headers: { "Cache-Control": "private, no-store" } });
+    }
 
     if (!ETHEREUM_ADDRESS.test(address)) {
       return NextResponse.json({ error: "Enter a valid 42-character Ethereum address." }, { status: 400 });

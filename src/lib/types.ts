@@ -1,5 +1,6 @@
 export type PortfolioAsset = {
   id: string;
+  chain?: string;
   name: string;
   symbol: string;
   amount: number;
@@ -13,6 +14,10 @@ export type PortfolioAsset = {
 
 export type PortfolioResponse = {
   address: string;
+  addresses?: {
+    ethereum?: string;
+    solana?: string;
+  };
   source: {
     kind: "wallet" | "exchange";
     provider: string;
