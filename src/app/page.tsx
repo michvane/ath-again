@@ -8,19 +8,17 @@ export default function Home() {
           <span className="mark" aria-hidden="true">↗</span>
           ATH, AGAIN
         </a>
-        <span className="read-only">Read-only</span>
       </header>
 
       <section className="intro" id="top">
-        <h1>What if you sold at the top?</h1>
-        <p>Connect where your crypto lives. We’ll show what it could be worth if every asset returned to its all-time high.</p>
+        <h1>Everything you hold, back at ATH.</h1>
+        <p>See what your portfolio would be worth if every asset climbed back to its all-time high.</p>
       </section>
 
       <WalletCalculator />
 
       <footer className="footer">
-        <span>For entertainment, not financial advice.</span>
-        <span>No transactions. No stored credentials.</span>
+        <span>Highs are historical. Hope is free.</span>
       </footer>
     </main>
   );

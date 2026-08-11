@@ -3,7 +3,7 @@
 import { FormEvent, useState } from "react";
 import type { PortfolioResponse } from "@/lib/types";
 
-type Flow = "choose" | "wallet" | "exchange" | "credentials";
+type Flow = "choose" | "paste" | "exchange" | "credentials";
 type Exchange = "bitvavo" | "binance";
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
@@ -101,7 +101,7 @@ export function WalletCalculator() {
         <div className="results-heading">
           <div>
             <span className="overline">{result.source.kind === "wallet" ? shortAddress(result.address) : result.source.label}</span>
-            <h2>Your alternate timeline</h2>
+            <h2>If everything came back</h2>
           </div>
           <button className="text-button" type="button" onClick={reset}>Check another portfolio</button>
         </div>
@@ -112,11 +112,11 @@ export function WalletCalculator() {
             <strong>{money.format(result.totals.current)}</strong>
           </article>
           <article className="highlight">
-            <span>At every ATH</span>
+            <span>Back at every ATH</span>
             <strong>{money.format(result.totals.ath)}</strong>
           </article>
           <article>
-            <span>Difference</span>
+            <span>The upside</span>
             <strong>+{money.format(result.totals.upside)}</strong>
             <small>{result.totals.multiplier.toFixed(1)}× today’s value</small>
           </article>
@@ -148,30 +148,33 @@ export function WalletCalculator() {
     <section className="flow-card" aria-live="polite">
       {flow === "choose" ? (
         <div className="flow-step">
-          <span className="overline">Choose one</span>
-          <h2>Where is your crypto?</h2>
-          <p className="step-copy">We only show the setup needed for your choice.</p>
+          <h2>How do you want to check it?</h2>
           <div className="choice-list">
-            <button type="button" onClick={() => navigate("wallet")}>
-              <span className="choice-icon" aria-hidden="true">↗</span>
-              <span><strong>In a wallet</strong><small>Paste an address or connect a browser wallet</small></span>
+            <button type="button" onClick={() => navigate("paste")}>
+              <span className="choice-icon paste" aria-hidden="true">⌁</span>
+              <span><strong>Paste a wallet address</strong><small>Instant. No connection needed.</small></span>
+              <i aria-hidden="true">→</i>
+            </button>
+            <button type="button" disabled={loading} onClick={connectWallet}>
+              <span className="choice-icon browser" aria-hidden="true">↗</span>
+              <span><strong>{loading ? "Connecting…" : "Connect a browser wallet"}</strong><small>MetaMask, Rabby, Phantom EVM, and more.</small></span>
               <i aria-hidden="true">→</i>
             </button>
             <button type="button" onClick={() => navigate("exchange")}>
-              <span className="choice-icon" aria-hidden="true">⇄</span>
-              <span><strong>On an exchange</strong><small>Connect Bitvavo or Binance with a read-only key</small></span>
+              <span className="choice-icon exchange" aria-hidden="true">⇄</span>
+              <span><strong>Connect an exchange</strong><small>Bitvavo or Binance.</small></span>
               <i aria-hidden="true">→</i>
             </button>
           </div>
+          {error ? <p className="form-error" role="alert">{error}</p> : null}
         </div>
       ) : null}
 
-      {flow === "wallet" ? (
+      {flow === "paste" ? (
         <div className="flow-step">
           <button className="back-button" type="button" onClick={() => navigate("choose")}>← Back</button>
-          <span className="overline">Wallet</span>
-          <h2>Use an Ethereum address</h2>
-          <p className="step-copy">Paste any public 0x address. Or ask a compatible browser wallet to share it.</p>
+          <h2>Paste a wallet address</h2>
+          <p className="step-copy">Enter any public Ethereum 0x address. It doesn’t need to be your own.</p>
           <form onSubmit={submitWallet}>
             <label className="field">
               <span>Public wallet address</span>
@@ -179,9 +182,6 @@ export function WalletCalculator() {
             </label>
             <button className="primary-button" disabled={loading} type="submit">{loading ? "Reading wallet…" : "Calculate"}</button>
           </form>
-          <div className="or"><span>or</span></div>
-          <button className="secondary-button" disabled={loading} type="button" onClick={connectWallet}>Connect browser wallet</button>
-          <p className="microcopy">Works with MetaMask, Rabby, Phantom EVM, and other injected EVM providers.</p>
           {error ? <p className="form-error" role="alert">{error}</p> : null}
         </div>
       ) : null}
