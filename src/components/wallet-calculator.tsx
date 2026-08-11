@@ -68,6 +68,10 @@ export function WalletCalculator() {
   return (
     <div className="calculator">
       <form onSubmit={onSubmit} aria-label="Ethereum wallet calculator">
+        <div className="form-topline">
+          <span>Check a public wallet</span>
+          <span className="network-status"><i /> Ethereum · live</span>
+        </div>
         <div className="entry-panel">
           <label htmlFor="wallet-address" className="sr-only">Ethereum wallet address</label>
           <input
@@ -75,7 +79,7 @@ export function WalletCalculator() {
             className="address-input"
             value={address}
             onChange={(event) => setAddress(event.target.value)}
-            placeholder="Paste 0x wallet address"
+            placeholder="Paste an Ethereum 0x address"
             autoComplete="off"
             spellCheck={false}
             required
@@ -85,7 +89,7 @@ export function WalletCalculator() {
           </button>
         </div>
         <div className="connect-row">
-          <button className="wallet-button" disabled={loading} type="button" onClick={connectWallet}>Connect browser wallet</button>
+          <button className="wallet-button" disabled={loading} type="button" onClick={connectWallet}>Connect EVM wallet</button>
           <span className="privacy-note">Read-only. We never ask you to sign anything.</span>
         </div>
         {error && <p className="form-error" role="alert">{error}</p>}
