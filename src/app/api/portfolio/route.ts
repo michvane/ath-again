@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { detectAddress, ETHEREUM_ADDRESS, SOLANA_ADDRESS } from "@/lib/addresses";
 import { getConnectedPortfolio } from "@/lib/portfolio";
-
-const ETHEREUM_ADDRESS = /^0x[a-fA-F0-9]{40}$/;
-const SOLANA_ADDRESS = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -28,12 +26,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(portfolio, { headers: { "Cache-Control": "private, no-store" } });
     }
 
-    if (ETHEREUM_ADDRESS.test(address)) {
-      const portfolio = await getConnectedPortfolio({ ethereum: address });
-      return NextResponse.json(portfolio, { headers: { "Cache-Control": "private, no-store" } });
-    }
-    if (SOLANA_ADDRESS.test(address)) {
-      const portfolio = await getConnectedPortfolio({ solana: address });
+    const detectedAddress = detectAddress(address);
+    if (detectedAddress) {
+      const portfolio = await getConnectedPortfolio(detectedAddress);
       return NextResponse.json(portfolio, { headers: { "Cache-Control": "private, no-store" } });
     }
     return NextResponse.json({ error: "Enter a valid Ethereum or Solana address." }, { status: 400 });

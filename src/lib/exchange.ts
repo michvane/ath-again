@@ -1,5 +1,6 @@
 import { createHmac } from "node:crypto";
 import type { PortfolioAsset, PortfolioResponse } from "./types";
+import { summarizeAssets } from "./portfolio/core";
 
 const BITVAVO_API = "https://api.bitvavo.com/v2";
 const BINANCE_API = "https://api.binance.com";
@@ -136,8 +137,6 @@ function buildResponse(exchange: ExchangeName, balances: ExchangeBalance[], mark
   }).filter((asset) => asset.currentValue >= 0.5).sort((a, b) => b.currentValue - a.currentValue);
 
   if (!assets.length) throw new Error("The exchange connected, but none of its balances matched usable ATH data.");
-  const current = assets.reduce((sum, asset) => sum + asset.currentValue, 0);
-  const ath = assets.reduce((sum, asset) => sum + asset.athValue, 0);
   const provider = exchange === "bitvavo" ? "Bitvavo" : "Binance";
   const omitted = Math.max(0, eligible.length - assets.length);
 
@@ -145,14 +144,7 @@ function buildResponse(exchange: ExchangeName, balances: ExchangeBalance[], mark
     address: exchange,
     source: { kind: "exchange", provider: exchange, label: `${provider} account` },
     fetchedAt: new Date().toISOString(),
-    totals: {
-      current,
-      ath,
-      upside: Math.max(0, ath - current),
-      multiplier: current > 0 ? ath / current : 0,
-      matchedAssets: assets.length,
-      eligibleAssets: eligible.length,
-    },
+    totals: summarizeAssets(assets, eligible.length),
     assets,
     note: `Read-only ${provider} snapshot. ${assets.length} asset${assets.length === 1 ? "" : "s"} matched to the highest-market-cap CoinGecko asset with that symbol${omitted ? `; ${omitted} fiat, dust, or unmatched balance${omitted === 1 ? " was" : "s were"} left out` : ""}. Credentials were used for this request only and were not stored.`,
   };

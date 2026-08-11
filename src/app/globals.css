@@ -87,9 +87,6 @@ a { color: inherit; text-decoration: none; }
 .results { padding: 40px; }
 .results-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; }
 .text-button { padding: 4px 0; font-size: 12px; white-space: nowrap; }
-.scope-note { margin-top: 26px; padding: 14px 16px; display: grid; grid-template-columns: auto 1fr; align-items: start; gap: 12px; border-radius: 12px; background: #fff0eb; }
-.scope-note span { padding: 5px 8px; border-radius: 999px; color: #6f2d20; background: var(--peach); font: 750 9px "SFMono-Regular", Consolas, monospace; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
-.scope-note p { color: #6f514a; font-size: 12px; line-height: 1.5; }
 .summary-grid { margin-top: 22px; display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
 .summary-grid article { min-width: 0; padding: 22px; display: flex; flex-direction: column; gap: 10px; border-right: 1px solid var(--line); }
 .summary-grid article:last-child { border-right: 0; }
@@ -124,8 +121,6 @@ a { color: inherit; text-decoration: none; }
   .flow-step, .results { padding: 24px; }
   .choice-list button { padding: 16px; }
   .results-heading { align-items: flex-start; flex-direction: column; }
-  .scope-note { grid-template-columns: 1fr; }
-  .scope-note span { justify-self: start; }
   .summary-grid { grid-template-columns: 1fr; }
   .summary-grid strong { font-size: 34px; white-space: normal; }
   .summary-grid article { border-right: 0; border-bottom: 1px solid var(--line); }

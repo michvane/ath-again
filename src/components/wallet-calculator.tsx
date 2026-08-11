@@ -1,58 +1,15 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { getWallets } from "@wallet-standard/app";
-import type { Wallet, WalletAccount } from "@wallet-standard/base";
 import { ArrowLeft, ArrowRight, Bitcoin, Check, ClipboardPaste, Euro, ExternalLink, Landmark, WalletCards } from "lucide-react";
+import { PortfolioResults } from "@/components/portfolio-results";
+import { connectBrowserWallet, discoverInjectedWallets, type BrowserWallet } from "@/lib/browser-wallets";
 import type { PortfolioResponse } from "@/lib/types";
 
 type Flow = "choose" | "wallets" | "paste" | "exchange" | "credentials";
 type Exchange = "bitvavo" | "binance";
-type Eip1193Provider = { request(args: { method: string; params?: unknown[] }): Promise<unknown> };
-type Eip6963Provider = { info: { uuid: string; name: string; icon: string; rdns: string }; provider: Eip1193Provider };
-type BrowserWallet = { id: string; name: string; evm?: Eip6963Provider; solana?: Wallet };
-type StandardConnect = { connect(input?: { silent?: boolean }): Promise<{ accounts: readonly WalletAccount[] }> };
 
-const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
-const price = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 4 });
-const quantity = new Intl.NumberFormat("en-US", { maximumFractionDigits: 4 });
 const exchangeNames: Record<Exchange, string> = { bitvavo: "Bitvavo", binance: "Binance" };
-
-function formatPrice(value: number) {
-  if (value >= 0.01) return price.format(value);
-  return `$${value.toLocaleString("en-US", { maximumFractionDigits: 10 })}`;
-}
-
-function shortAddress(address: string) {
-  return `${address.slice(0, 6)}…${address.slice(-4)}`;
-}
-
-async function discoverInjectedWallets(): Promise<BrowserWallet[]> {
-  const evmProviders = new Map<string, Eip6963Provider>();
-  const receiveProvider = (event: Event) => {
-    const detail = (event as CustomEvent<Eip6963Provider>).detail;
-    if (detail?.info?.uuid && detail.provider) evmProviders.set(detail.info.uuid, detail);
-  };
-  window.addEventListener("eip6963:announceProvider", receiveProvider);
-  window.dispatchEvent(new Event("eip6963:requestProvider"));
-  const standardWallets = getWallets();
-  await new Promise((resolve) => window.setTimeout(resolve, 350));
-  window.removeEventListener("eip6963:announceProvider", receiveProvider);
-
-  const merged = new Map<string, BrowserWallet>();
-  for (const detail of evmProviders.values()) {
-    const key = detail.info.name.trim().toLowerCase();
-    merged.set(key, { id: `evm:${detail.info.uuid}`, name: detail.info.name, evm: detail });
-  }
-  for (const wallet of standardWallets.get()) {
-    if (!wallet.chains.some((chain) => chain.startsWith("solana:"))) continue;
-    if (!("standard:connect" in wallet.features)) continue;
-    const key = wallet.name.trim().toLowerCase();
-    const existing = merged.get(key);
-    merged.set(key, { id: existing?.id || `solana:${wallet.name}`, name: wallet.name, evm: existing?.evm, solana: wallet });
-  }
-  return [...merged.values()].sort((a, b) => Number(Boolean(b.evm && b.solana)) - Number(Boolean(a.evm && a.solana)) || a.name.localeCompare(b.name));
-}
 
 export function WalletCalculator() {
   const [flow, setFlow] = useState<Flow>("choose");
@@ -134,28 +91,8 @@ export function WalletCalculator() {
     setLoading(true);
     setError("");
     try {
-      let ethereumAddress: string | undefined;
-      let solanaAddress: string | undefined;
-      const connectionErrors: Error[] = [];
-      if (wallet.evm) {
-        try {
-          const accounts = await wallet.evm.provider.request({ method: "eth_requestAccounts" }) as string[];
-          ethereumAddress = accounts[0];
-        } catch (caught) {
-          connectionErrors.push(caught instanceof Error ? caught : new Error("The EVM account was not shared."));
-        }
-      }
-      if (wallet.solana) {
-        try {
-          const feature = wallet.solana.features["standard:connect"] as StandardConnect;
-          const connected = await feature.connect();
-          solanaAddress = connected.accounts.find((account) => account.chains.some((chain) => chain.startsWith("solana:")))?.address;
-        } catch (caught) {
-          connectionErrors.push(caught instanceof Error ? caught : new Error("The Solana account was not shared."));
-        }
-      }
-      if (!ethereumAddress && !solanaAddress) throw connectionErrors[0] || new Error("No supported account was shared by the wallet.");
-      await requestPortfolio("/api/portfolio", { ethereumAddress, solanaAddress });
+      const addresses = await connectBrowserWallet(wallet);
+      await requestPortfolio("/api/portfolio", { ethereumAddress: addresses.ethereum, solanaAddress: addresses.solana });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Wallet connection was cancelled.");
       setLoading(false);
@@ -163,66 +100,11 @@ export function WalletCalculator() {
   }
 
   if (result) {
-    const walletResult = result.source.kind === "wallet";
-    const multichainResult = result.source.provider === "multichain";
-    const ethereumOnly = result.source.provider === "ethereum";
-    return (
-      <section className="results" id="results" aria-live="polite">
-        <div className="results-heading">
-          <div>
-            <span className="overline">{multichainResult ? "Connected wallet · multichain" : walletResult ? `Ethereum · ${shortAddress(result.address)}` : result.source.label}</span>
-            <h2>Your portfolio at all-time highs</h2>
-          </div>
-          <button className="text-button" type="button" onClick={reset}>Check another portfolio</button>
-        </div>
-
-        {ethereumOnly ? (
-          <div className="scope-note">
-            <span>Ethereum only</span>
-            <p>This is the subtotal for the connected Ethereum address. Phantom balances on Solana, HyperEVM, Bitcoin, Base, Polygon, and other networks are not included yet.</p>
-          </div>
-        ) : null}
-
-        <div className="summary-grid">
-          <article>
-            <span>{ethereumOnly ? "On Ethereum today" : "Value today"}</span>
-            <strong>{money.format(result.totals.current)}</strong>
-          </article>
-          <article className="highlight">
-            <span>If each asset hit ATH</span>
-            <strong>{money.format(result.totals.ath)}</strong>
-          </article>
-          <article>
-            <span>Potential increase</span>
-            <strong>+{money.format(result.totals.upside)}</strong>
-            <small>{result.totals.multiplier.toFixed(1)}× today’s value</small>
-          </article>
-        </div>
-
-        <p className="coverage">{result.note}</p>
-
-        <div className="asset-table" role="table" aria-label="Portfolio assets">
-          <div className="asset-row table-head" role="row">
-            <span>Asset</span><span>Holdings</span><span>Price now</span><span>ATH value</span>
-          </div>
-          {result.assets.map((asset) => (
-            <div className="asset-row" role="row" key={`${asset.chain || result.source.provider}:${asset.id}`}>
-              <div className="token" role="cell">
-                <span className="token-icon">{asset.symbol.slice(0, 2)}</span>
-                <span className="token-name">{asset.name}<small>{asset.symbol}{asset.chain ? ` · ${asset.chain}` : ""}</small></span>
-              </div>
-              <span className="number" role="cell"><i>Holdings</i>{quantity.format(asset.amount)}</span>
-              <span className="number" role="cell"><i>Price now</i>{formatPrice(asset.currentPrice)}</span>
-              <strong className="number" role="cell"><i>ATH value</i>{money.format(asset.athValue)}</strong>
-            </div>
-          ))}
-        </div>
-      </section>
-    );
+    return <PortfolioResults result={result} onReset={reset} />;
   }
 
   return (
-    <section className="flow-card" aria-live="polite">
+    <section className="flow-card" aria-live="polite" aria-busy={loading}>
       {flow === "choose" ? (
         <div className="flow-step">
           <h2>How do you want to check it?</h2>
