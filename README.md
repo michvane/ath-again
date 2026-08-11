@@ -1,29 +1,27 @@
 # ATH, Again
 
-A small, read-only Ethereum wallet app that answers one emotionally unhelpful question: what would this wallet be worth if every held token returned to its all-time high?
+A small, emotionally unhelpful crypto calculator: what would your current portfolio be worth if every held asset returned to its all-time high?
 
-## What it does
+## Sources
 
-- Accepts a pasted Ethereum address or an injected browser wallet connection.
-- Reads native ETH and ERC-20 balances from Blockscout.
-- Matches meaningful holdings to CoinGecko market data.
-- Compares the tracked value today with the sum at each token's historical USD ATH.
-- Never requests a signature or transaction.
+- Bitvavo spot and available staking balances through a one-time read-only API request.
+- Binance spot balances through a one-time read-only API request.
+- Public Ethereum addresses through Blockscout, pasted directly or discovered through any injected EIP-1193 wallet.
+- Current prices and historical USD ATH data through CoinGecko.
+
+API credentials are used in request memory and are not stored. Create read-only keys without trading or withdrawal permissions.
 
 ## Run locally
 
 ```bash
 npm install
-cp .env.example .env.local
 npm run dev
 ```
 
-The CoinGecko key is optional for local experiments but recommended for predictable free-tier limits.
+`COINGECKO_DEMO_API_KEY` is optional for local experiments but recommended for predictable free-tier limits.
 
-## Product scope
-
-Version one deliberately supports Ethereum only and prices the largest nine ERC-20 balances plus native ETH. This keeps the first result fast, filters most wallet spam, and stays friendly to free API limits. See [docs/architecture.md](docs/architecture.md) for the provider choices, privacy model, caching strategy, failure modes, and multichain path.
+See [docs/architecture.md](docs/architecture.md) for adapter boundaries, credential handling, demand tracking, pricing caveats, and the wallet-standard multichain path.
 
 ## Disclaimer
 
-This is an entertainment calculator, not financial advice. “At every ATH” is a counterfactual sum: those highs occurred on different dates and could not necessarily have been realized together.
+This is entertainment, not financial advice. “At every ATH” is a counterfactual sum: those highs occurred on different dates and could not necessarily have been realized together.

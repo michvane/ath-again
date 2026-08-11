@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "ATH, Again — Your portfolio at all-time highs",
-  description: "See what an Ethereum wallet would be worth if every held token revisited its all-time high.",
+  description: "See what your crypto portfolio would be worth if every held asset revisited its all-time high.",
   openGraph: {
     title: "ATH, Again",
     description: "A tiny calculator for enormous crypto regrets.",
@@ -15,7 +16,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>{children}<Analytics /></body>
     </html>
   );
 }

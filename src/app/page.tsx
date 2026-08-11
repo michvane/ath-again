@@ -38,10 +38,10 @@ export default function Home() {
 
           <div className="hero-copy">
             <span className="hero-badge">Portfolio therapy, free of charge</span>
-            <h1>Your wallet<br />at its <em>absolute best.</em></h1>
+            <h1>Your crypto<br />at its <em>absolute best.</em></h1>
             <p>
-              One wallet in. One wildly optimistic number out. See what your
-              holdings would be worth at every token’s all-time high.
+              One portfolio in. One wildly optimistic number out. See what your
+              holdings would be worth at every asset’s all-time high.
             </p>
           </div>
 
@@ -51,7 +51,7 @@ export default function Home() {
 
       <footer className="footer">
         <p>Prices are estimates, not promises. Sadly.</p>
-        <p>Read-only · No transactions · Blockscout + CoinGecko</p>
+        <p>Read-only · No transactions · Exchanges + wallets + CoinGecko</p>
       </footer>
     </main>
   );

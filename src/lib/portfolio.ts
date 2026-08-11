@@ -175,6 +175,7 @@ export async function getPortfolio(address: string): Promise<PortfolioResponse> 
 
   return {
     address,
+    source: { kind: "wallet", provider: "ethereum", label: "Ethereum wallet" },
     fetchedAt: new Date().toISOString(),
     totals: {
       current,

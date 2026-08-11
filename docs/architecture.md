@@ -1,89 +1,86 @@
 # System design
 
-## Goal and boundaries
+## Product boundary
 
-ATH, Again is a stateless, read-only portfolio calculator. A user submits an Ethereum address by pasting it or sharing the active account from an injected browser wallet. The app never asks for a signature, transaction, private key, seed phrase, login, or write permission.
+ATH, Again is a stateless, read-only portfolio calculator. The first-class sources are Bitvavo and Binance exchange balances, followed by public EVM wallets. The app never trades, withdraws, signs a transaction, stores an API credential, or requests a seed phrase or private key.
 
-The MVP supports Ethereum native ETH and fungible ERC-20 balances. NFTs, LP positions, staked assets, lending positions, bridged representations without CoinGecko coverage, and unpriced tokens are out of scope. The UI says exactly how many assets contributed to the total.
+Exchange credentials are submitted over HTTPS to a Node.js route, held only in request memory, used to sign one balance lookup, and discarded when the request ends. Users must create a key with read permissions only. Persistent account linking would require authentication, encrypted secret storage, rotation and revocation UX, and is intentionally outside this prototype.
 
 ## Request flow
 
 ```text
 Browser
-  │  POST public wallet address
-  ▼
-Next.js route on Vercel
-  ├── Blockscout: ETH balance, ERC-20 balances, current USD prices
-  ├── filter dust/spam and keep the largest balances
-  └── CoinGecko: current price, USD ATH and ATH date by contract
-  │
-  ▼
-Normalized portfolio + transparent coverage note
-  │
-  ▼
-Browser renders current value, counterfactual ATH value and asset rows
+  ├── Bitvavo/Binance read-only API key + secret
+  └── public EVM address
+             │
+             ▼
+Next.js routes on Vercel
+  ├── exchange adapter: sign request and normalize spot/staking balances
+  ├── EVM adapter: Blockscout ETH + ERC-20 balances
+  └── CoinGecko: current USD price, ATH and ATH date
+             │
+             ▼
+Normalized PortfolioResponse → counterfactual ATH result
 ```
 
-## Why these providers
+The exchange API route deliberately logs only the provider, timing, request ID and matched asset count. Credentials and request bodies never enter application logs or analytics.
 
-### Holdings: Blockscout
+## Provider-independent adapters
 
-The public Blockscout v2 API exposes address information and paginated token balances without requiring the app to run an archive node or scan Transfer logs. Its token response includes decimals, contract addresses, icons and an exchange rate. The MVP requests only the first ERC-20 page instead of downloading a wallet's entire NFT and spam inventory. It is a strong zero-cost MVP dependency and is hidden behind one module so it can later be replaced with Alchemy, Moralis, GoldRush or Blockscout Pro.
+The core boundary is a portfolio source, not a wallet brand. Every adapter produces the same normalized asset shape:
 
-The app intentionally does not use `web3.js`. Wallet connection only needs the EIP-1193 provider exposed by a browser wallet, while balance discovery requires an indexer rather than an RPC library. If contract reads are added later, `viem` is the smaller, typed modern choice.
+```ts
+type Holding = {
+  symbol: string
+  amount: number
+  canonicalId?: string
+}
+```
 
-### ATH data: CoinGecko Demo
+- Exchange adapters authenticate against a venue and return its off-chain balances.
+- EVM adapters accept an EIP-1193 address regardless of whether MetaMask, Rabby, Coinbase Wallet or Phantom exposed it.
+- Future Solana support should use Wallet Standard and public addresses rather than a Phantom-only foundation.
+- Future Bitcoin support should accept public addresses/descriptors and use a UTXO indexer.
 
-CoinGecko returns `market_data.ath.usd` and `ath_date.usd` from a token's platform contract endpoint. The free Demo tier avoids a CoinMarketCap subscription. Contract lookups are cached for 24 hours because ATH values rarely change; current wallet balances are not cached in the browser or CDN. The app checks only the nine largest priced ERC-20 balances with an eight-second upstream timeout, which controls latency and API usage while excluding most wallet dust.
+Wallet connection is only address discovery. Portfolio discovery remains chain-specific because EVM token contracts, Solana token accounts and Bitcoin UTXOs use different data models.
 
-For a busier public launch, add a persistent contract-to-CoinGecko cache in Vercel Runtime Cache or Redis. A nightly job could refresh popular tokens and reduce nearly all request-time CoinGecko traffic.
+## Current integrations
 
-## Calculation
+### Bitvavo
+
+`GET /v2/balance` supplies available and in-order spot balances. The adapter also attempts `GET /v2/stakingBalance`; unsupported or unpermitted staking reads do not fail the spot portfolio. Requests use Bitvavo's timestamped HMAC-SHA256 headers.
+
+### Binance
+
+`GET /api/v3/account` supplies free and locked spot balances. Requests use Binance's HMAC-SHA256 signed query and a `USER_DATA` API key. Trading permissions are unnecessary.
+
+### EVM wallets
+
+Pasted addresses and injected EIP-1193 providers share the existing Blockscout adapter. It is wallet-brand agnostic but currently indexes Ethereum only.
+
+## Pricing and identity
+
+Exchange balances expose symbols, not chain contract identifiers. The prototype queries CoinGecko markets for those symbols and selects the highest-market-cap match. This is practical for common assets but not tax-grade identity resolution; ambiguous or unmatched assets are disclosed in the result note.
 
 For every matched asset:
 
 ```text
-current value = token amount × current USD price
-ATH value     = token amount × historical USD ATH price
-portfolio ATH = Σ ATH value for all matched assets
+current value = amount × current USD price
+ATH value     = amount × max(historical USD ATH, current USD price)
+portfolio ATH = Σ ATH value
 ```
 
-The result is intentionally counterfactual. Each token reached its high on a different date. The app does not claim that the total was ever simultaneously realizable.
+Fiat, dust below $0.50 and unmatched assets are omitted. Token highs occurred on different dates, so the total is intentionally counterfactual rather than a historical portfolio snapshot.
 
-## Wallet connection
+## Demand tracking
 
-The MVP supports both paths with the same API call:
+Coming-soon clicks emit the anonymous Vercel Web Analytics event `connector_interest` with one property, `connector`. The same selection is written as a credential-free structured runtime log so interest remains observable when custom event reporting is unavailable on the current Vercel plan.
 
-1. Paste any public `0x` address.
-2. Use `eth_requestAccounts` against an injected EIP-1193 provider (MetaMask, Rabby, Coinbase Wallet extension, and similar).
+## Security follow-ups before wider use
 
-There is no WalletConnect QR modal in v1, so there is no Reown project ID or extra client bundle. If mobile deep linking becomes important, add wagmi + Reown AppKit behind the existing `connectWallet` action. Connection still remains read-only.
-
-## Privacy and security
-
-- Wallet addresses are public blockchain identifiers, but the route uses POST and sets `private, no-store` so address-specific responses are not CDN cached or put in query strings.
-- The CoinGecko key exists only in the server environment.
-- Input is strictly validated as a 20-byte hex Ethereum address.
-- No arbitrary RPC URL, chain, token contract, or upstream URL is accepted from the client.
-- Upstream errors are converted to user-safe messages; API keys and raw provider payloads are never returned.
-- Before a large public launch, add per-IP rate limiting and bot protection to prevent free-tier exhaustion.
-
-## Scaling and multichain path
-
-Keep the `PortfolioResponse` contract stable and add provider adapters:
-
-1. Add a chain selector whose entries map to a fixed Blockscout instance and CoinGecko platform ID.
-2. Normalize each chain's native asset and ERC-20 results into `Candidate` records.
-3. Fetch chains concurrently with a bounded concurrency limit.
-4. Deduplicate canonical assets only for display; never merge balances based on symbol alone.
-5. Add Vercel Runtime Cache or Redis for contract mappings and ATH records, plus a short wallet snapshot cache if traffic demands it.
-
-At larger scale, a multichain portfolio API is worth paying for because it handles spam classification, DeFi positions, token identity and pagination. The UI and calculation layer would not need to change.
-
-## Known failure modes
-
-- CoinGecko has no record for a contract: omit it and explain coverage.
-- An API is rate-limited: return a retryable error rather than inventing a price.
-- Blockscout exchange rates are stale: CoinGecko is preferred when its response is available, and the result is labeled an estimate.
-- Rebasing, fee-on-transfer and proxy-migrated tokens: the indexer balance is accepted; unusual assets may be omitted.
-- A wallet contains hundreds of airdrop tokens: only priced balances above $0.50 are eligible and only the largest nine ERC-20s are enriched.
+- Add per-IP rate limiting and bot protection to credential and public-wallet routes.
+- Review exchange key IP allowlisting; dynamic serverless egress may require static egress infrastructure.
+- Add explicit request-size limits at the platform layer.
+- Never add trade or withdrawal endpoints to the credential-bearing adapter.
+- If persistent linking is added, require user authentication and envelope encryption backed by managed KMS.
+- Replace symbol-only matching with exchange asset metadata plus a curated canonical-ID registry.

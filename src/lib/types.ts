@@ -13,6 +13,11 @@ export type PortfolioAsset = {
 
 export type PortfolioResponse = {
   address: string;
+  source: {
+    kind: "wallet" | "exchange";
+    provider: string;
+    label: string;
+  };
   fetchedAt: string;
   totals: {
     current: number;
