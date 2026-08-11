@@ -28,21 +28,6 @@ Wallet discovery is provider-independent: Phantom, MetaMask, Keplr, HashPack, an
 
 ## Architecture
 
-```mermaid
-flowchart LR
-  UI["Next.js client UI"] --> API["POST route handlers"]
-  API --> AGG["Portfolio aggregator"]
-  AGG --> ETH["Ethereum adapter"]
-  AGG --> SOL["Solana adapter"]
-  AGG --> HYPE["HyperEVM adapter"]
-  API --> EX["Exchange adapters"]
-  ETH --> NORMAL["Normalized PortfolioResponse"]
-  SOL --> NORMAL
-  HYPE --> NORMAL
-  EX --> NORMAL
-  NORMAL --> UI
-```
-
 Chain-specific code is isolated under `src/lib/portfolio/`. Every adapter returns the same normalized asset and portfolio shapes, so the UI never needs to understand token accounts, ERC-20 decimals, UTXOs, or exchange response formats.
 
 ## Local development
