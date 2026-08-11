@@ -268,11 +268,11 @@ export function WalletCalculator() {
         <div className="flow-step">
           <button className="back-button" type="button" onClick={() => navigate("choose")}>← Back</button>
           <h2>Paste a wallet address</h2>
-          <p className="step-copy">Enter any public Ethereum 0x address. It doesn’t need to be your own.</p>
+          <p className="step-copy">Enter any public Ethereum or Solana address. It doesn’t need to be your own.</p>
           <form onSubmit={submitWallet}>
             <label className="field">
               <span>Public wallet address</span>
-              <input value={address} onChange={(event) => setAddress(event.target.value)} placeholder="0x…" autoComplete="off" spellCheck={false} required />
+              <input value={address} onChange={(event) => setAddress(event.target.value)} placeholder="0x… or Solana address" autoComplete="off" spellCheck={false} required />
             </label>
             <button className="primary-button" disabled={loading} type="submit">{loading ? "Reading wallet…" : "Calculate"}</button>
           </form>

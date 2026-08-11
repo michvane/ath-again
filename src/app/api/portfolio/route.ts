@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getConnectedPortfolio, getPortfolio } from "@/lib/portfolio";
+import { getConnectedPortfolio } from "@/lib/portfolio";
 
 const ETHEREUM_ADDRESS = /^0x[a-fA-F0-9]{40}$/;
 const SOLANA_ADDRESS = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
@@ -28,14 +28,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(portfolio, { headers: { "Cache-Control": "private, no-store" } });
     }
 
-    if (!ETHEREUM_ADDRESS.test(address)) {
-      return NextResponse.json({ error: "Enter a valid 42-character Ethereum address." }, { status: 400 });
+    if (ETHEREUM_ADDRESS.test(address)) {
+      const portfolio = await getConnectedPortfolio({ ethereum: address });
+      return NextResponse.json(portfolio, { headers: { "Cache-Control": "private, no-store" } });
     }
-
-    const portfolio = await getPortfolio(address);
-    return NextResponse.json(portfolio, {
-      headers: { "Cache-Control": "private, no-store" },
-    });
+    if (SOLANA_ADDRESS.test(address)) {
+      const portfolio = await getConnectedPortfolio({ solana: address });
+      return NextResponse.json(portfolio, { headers: { "Cache-Control": "private, no-store" } });
+    }
+    return NextResponse.json({ error: "Enter a valid Ethereum or Solana address." }, { status: 400 });
   } catch (caught) {
     const message = caught instanceof Error ? caught.message : "The alternate timeline is temporarily unavailable.";
     return NextResponse.json({ error: message }, { status: 502 });
