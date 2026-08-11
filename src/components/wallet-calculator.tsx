@@ -96,27 +96,35 @@ export function WalletCalculator() {
   }
 
   if (result) {
+    const walletResult = result.source.kind === "wallet";
     return (
       <section className="results" id="results" aria-live="polite">
         <div className="results-heading">
           <div>
-            <span className="overline">{result.source.kind === "wallet" ? shortAddress(result.address) : result.source.label}</span>
-            <h2>If everything came back</h2>
+            <span className="overline">{walletResult ? `Ethereum · ${shortAddress(result.address)}` : result.source.label}</span>
+            <h2>{walletResult ? "Your Ethereum ATH estimate" : "Your portfolio at all-time highs"}</h2>
           </div>
           <button className="text-button" type="button" onClick={reset}>Check another portfolio</button>
         </div>
 
+        {walletResult ? (
+          <div className="scope-note">
+            <span>Ethereum only</span>
+            <p>This is the subtotal for the connected Ethereum address. Phantom balances on Solana, HyperEVM, Bitcoin, Base, Polygon, and other networks are not included yet.</p>
+          </div>
+        ) : null}
+
         <div className="summary-grid">
           <article>
-            <span>Value today</span>
+            <span>{walletResult ? "On Ethereum today" : "Value today"}</span>
             <strong>{money.format(result.totals.current)}</strong>
           </article>
           <article className="highlight">
-            <span>Back at every ATH</span>
+            <span>If each asset hit ATH</span>
             <strong>{money.format(result.totals.ath)}</strong>
           </article>
           <article>
-            <span>The upside</span>
+            <span>Potential increase</span>
             <strong>+{money.format(result.totals.upside)}</strong>
             <small>{result.totals.multiplier.toFixed(1)}× today’s value</small>
           </article>
@@ -157,7 +165,7 @@ export function WalletCalculator() {
             </button>
             <button type="button" disabled={loading} onClick={connectWallet}>
               <span className="choice-icon browser" aria-hidden="true">↗</span>
-              <span><strong>{loading ? "Connecting…" : "Connect a browser wallet"}</strong><small>MetaMask, Rabby, Phantom EVM, and more.</small></span>
+              <span><strong>{loading ? "Connecting…" : "Connect an Ethereum wallet"}</strong><small>Reads the active Ethereum address only.</small></span>
               <i aria-hidden="true">→</i>
             </button>
             <button type="button" onClick={() => navigate("exchange")}>

@@ -186,6 +186,6 @@ export async function getPortfolio(address: string): Promise<PortfolioResponse> 
       eligibleAssets,
     },
     assets: enriched,
-    note: `Based on ${enriched.length} token${enriched.length === 1 ? "" : "s"} with verified CoinGecko ATH data${omitted ? `; ${omitted} smaller or unmatched asset${omitted === 1 ? " was" : "s were"} left out` : ""}. Values are USD estimates, and token ATHs did not happen at the same time.`,
+    note: `Ethereum only. Based on ${enriched.length} token${enriched.length === 1 ? "" : "s"} with verified CoinGecko ATH data${omitted ? `; ${omitted} smaller or unmatched asset${omitted === 1 ? " was" : "s were"} left out` : ""}. Values are USD estimates, and token ATHs did not happen at the same time.`,
   };
 }
