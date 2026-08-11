@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import { getWallets } from "@wallet-standard/app";
 import type { Wallet, WalletAccount } from "@wallet-standard/base";
+import { ArrowLeft, ArrowRight, Bitcoin, Check, ClipboardPaste, Euro, ExternalLink, Landmark, WalletCards } from "lucide-react";
 import type { PortfolioResponse } from "@/lib/types";
 
 type Flow = "choose" | "wallets" | "paste" | "exchange" | "credentials";
@@ -227,19 +228,19 @@ export function WalletCalculator() {
           <h2>How do you want to check it?</h2>
           <div className="choice-list">
             <button type="button" onClick={() => navigate("paste")}>
-              <span className="choice-icon paste" aria-hidden="true">⌁</span>
+              <span className="choice-icon paste" aria-hidden="true"><ClipboardPaste /></span>
               <span><strong>Paste a wallet address</strong><small>Instant. No connection needed.</small></span>
-              <i aria-hidden="true">→</i>
+              <i aria-hidden="true"><ArrowRight /></i>
             </button>
             <button type="button" disabled={loading} onClick={findBrowserWallets}>
-              <span className="choice-icon browser" aria-hidden="true">↗</span>
+              <span className="choice-icon browser" aria-hidden="true"><WalletCards /></span>
               <span><strong>{loading ? "Finding wallets…" : "Connect a browser wallet"}</strong><small>Ethereum, Solana, and HyperEVM.</small></span>
-              <i aria-hidden="true">→</i>
+              <i aria-hidden="true"><ArrowRight /></i>
             </button>
             <button type="button" onClick={() => navigate("exchange")}>
-              <span className="choice-icon exchange" aria-hidden="true">⇄</span>
+              <span className="choice-icon exchange" aria-hidden="true"><Landmark /></span>
               <span><strong>Connect an exchange</strong><small>Bitvavo or Binance.</small></span>
-              <i aria-hidden="true">→</i>
+              <i aria-hidden="true"><ArrowRight /></i>
             </button>
           </div>
           {error ? <p className="form-error" role="alert">{error}</p> : null}
@@ -248,7 +249,7 @@ export function WalletCalculator() {
 
       {flow === "wallets" ? (
         <div className="flow-step">
-          <button className="back-button" type="button" onClick={() => navigate("choose")}>← Back</button>
+          <button className="back-button" type="button" onClick={() => navigate("choose")}><ArrowLeft /> Back</button>
           <h2>Choose your wallet</h2>
           <p className="step-copy">We’ll combine every supported account this wallet shares.</p>
           <div className="choice-list compact">
@@ -256,7 +257,7 @@ export function WalletCalculator() {
               <button key={wallet.id} type="button" disabled={loading} onClick={() => connectWallet(wallet)}>
                 <span className="wallet-letter" aria-hidden="true">{wallet.name.slice(0, 1)}</span>
                 <span><strong>{wallet.name}</strong><small>{[wallet.evm ? "Ethereum + HyperEVM" : "", wallet.solana ? "Solana" : ""].filter(Boolean).join(" · ")}</small></span>
-                <i aria-hidden="true">→</i>
+                <i aria-hidden="true"><ArrowRight /></i>
               </button>
             ))}
           </div>
@@ -266,7 +267,7 @@ export function WalletCalculator() {
 
       {flow === "paste" ? (
         <div className="flow-step">
-          <button className="back-button" type="button" onClick={() => navigate("choose")}>← Back</button>
+          <button className="back-button" type="button" onClick={() => navigate("choose")}><ArrowLeft /> Back</button>
           <h2>Paste a wallet address</h2>
           <p className="step-copy">Enter any public Ethereum or Solana address. It doesn’t need to be your own.</p>
           <form onSubmit={submitWallet}>
@@ -282,16 +283,16 @@ export function WalletCalculator() {
 
       {flow === "exchange" ? (
         <div className="flow-step">
-          <button className="back-button" type="button" onClick={() => navigate("choose")}>← Back</button>
+          <button className="back-button" type="button" onClick={() => navigate("choose")}><ArrowLeft /> Back</button>
           <span className="overline">Exchange</span>
           <h2>Choose your exchange</h2>
           <p className="step-copy">You’ll create a read-only API key in the next step.</p>
           <div className="choice-list compact">
             {(["bitvavo", "binance"] as Exchange[]).map((item) => (
               <button key={item} type="button" onClick={() => { setExchange(item); navigate("credentials"); }}>
-                <span className={`exchange-icon ${item}`}>{item === "bitvavo" ? "B" : "◆"}</span>
+                <span className={`exchange-icon ${item}`} aria-hidden="true">{item === "bitvavo" ? <Euro /> : <Bitcoin />}</span>
                 <span><strong>{exchangeNames[item]}</strong><small>Spot balances{item === "bitvavo" ? " and staking" : ""}</small></span>
-                <i aria-hidden="true">→</i>
+                <i aria-hidden="true"><ArrowRight /></i>
               </button>
             ))}
           </div>
@@ -300,7 +301,7 @@ export function WalletCalculator() {
 
       {flow === "credentials" && exchange ? (
         <div className="flow-step">
-          <button className="back-button" type="button" onClick={() => navigate("exchange")}>← Exchanges</button>
+          <button className="back-button" type="button" onClick={() => navigate("exchange")}><ArrowLeft /> Exchanges</button>
           <span className="overline">{exchangeNames[exchange]}</span>
           <h2>Connect read-only access</h2>
           <p className="step-copy">Create a key with read permissions only. Never enable trading or withdrawals.</p>
@@ -316,10 +317,10 @@ export function WalletCalculator() {
             <button className="primary-button" disabled={loading} type="submit">{loading ? "Reading balances…" : "Connect and calculate"}</button>
           </form>
           <div className="security-note">
-            <span aria-hidden="true">✓</span>
+            <span aria-hidden="true"><Check /></span>
             <p>Used once over HTTPS, then discarded. We do not store your credentials.</p>
           </div>
-          <a className="help-link" href={exchange === "bitvavo" ? "https://docs.bitvavo.com/docs/get-started/" : "https://www.binance.com/en/my/settings/api-management"} target="_blank" rel="noreferrer">How to create a read-only key ↗</a>
+          <a className="help-link" href={exchange === "bitvavo" ? "https://docs.bitvavo.com/docs/get-started/" : "https://www.binance.com/en/my/settings/api-management"} target="_blank" rel="noreferrer">How to create a read-only key <ExternalLink /></a>
           {error ? <p className="form-error" role="alert">{error}</p> : null}
         </div>
       ) : null}

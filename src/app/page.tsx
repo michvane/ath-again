@@ -1,11 +1,12 @@
 import { WalletCalculator } from "@/components/wallet-calculator";
+import { ArrowUpRight } from "lucide-react";
 
 export default function Home() {
   return (
     <main className="page-shell">
       <header className="topbar">
         <a className="wordmark" href="#top" aria-label="ATH, Again home">
-          <span className="mark" aria-hidden="true">↗</span>
+          <span className="mark" aria-hidden="true"><ArrowUpRight size={15} strokeWidth={2.4} /></span>
           ATH, AGAIN
         </a>
       </header>

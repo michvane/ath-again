@@ -44,7 +44,8 @@ a { color: inherit; text-decoration: none; }
 .flow-step h2, .results-heading h2 { font-size: clamp(30px, 5vw, 42px); line-height: 1.05; letter-spacing: -.05em; }
 .step-copy { margin-top: 12px; color: var(--muted); font-size: 15px; line-height: 1.5; }
 .back-button, .text-button { border: 0; border-bottom: 1px solid currentColor; color: var(--muted); background: transparent; cursor: pointer; }
-.back-button { margin-bottom: 32px; padding: 3px 0; font-size: 12px; }
+.back-button { margin-bottom: 32px; padding: 3px 0; display: inline-flex; align-items: center; gap: 5px; font-size: 12px; }
+.back-button svg { width: 13px; height: 13px; }
 .back-button:hover, .text-button:hover { color: var(--ink); }
 
 .choice-list { margin-top: 30px; display: grid; gap: 12px; }
@@ -55,7 +56,9 @@ a { color: inherit; text-decoration: none; }
 .choice-list strong { display: block; font-size: 16px; }
 .choice-list small { display: block; margin-top: 5px; color: var(--muted); font-size: 12px; line-height: 1.35; }
 .choice-list i { color: var(--muted); font-style: normal; }
+.choice-list i svg { width: 16px; height: 16px; stroke-width: 1.8; }
 .choice-icon, .exchange-icon, .wallet-letter { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 12px; background: var(--soft); font-weight: 800; }
+.choice-icon svg, .exchange-icon svg { width: 19px; height: 19px; stroke-width: 1.8; }
 .wallet-letter { color: white; background: var(--ink); font-size: 15px; }
 .choice-icon.paste { background: var(--accent); }
 .choice-icon.browser { background: var(--lilac); }
@@ -76,7 +79,9 @@ a { color: inherit; text-decoration: none; }
 .primary-button:disabled { cursor: wait; opacity: .55; }
 .security-note { margin-top: 22px; padding: 14px; display: flex; align-items: flex-start; gap: 10px; border-radius: 12px; background: var(--soft); color: var(--muted); font-size: 12px; line-height: 1.45; }
 .security-note span { width: 21px; height: 21px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 50%; color: #21643c; background: #d5f1de; font-weight: 800; }
-.help-link { display: inline-block; margin-top: 18px; padding-bottom: 2px; border-bottom: 1px solid currentColor; font-size: 12px; font-weight: 650; }
+.security-note svg { width: 12px; height: 12px; stroke-width: 2.5; }
+.help-link { margin-top: 18px; padding-bottom: 2px; display: inline-flex; align-items: center; gap: 5px; border-bottom: 1px solid currentColor; font-size: 12px; font-weight: 650; }
+.help-link svg { width: 12px; height: 12px; }
 .form-error { margin-top: 20px; padding: 12px 14px; border-radius: 10px; color: var(--danger); background: #fff1f4; font-size: 13px; line-height: 1.45; }
 
 .results { padding: 40px; }
