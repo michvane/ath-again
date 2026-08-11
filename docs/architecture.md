@@ -72,9 +72,15 @@ portfolio ATH = Σ ATH value
 
 Fiat, dust below $0.50 and unmatched assets are omitted. Token highs occurred on different dates, so the total is intentionally counterfactual rather than a historical portfolio snapshot.
 
-## Demand tracking
+## Interaction model
 
-Coming-soon clicks emit the anonymous Vercel Web Analytics event `connector_interest` with one property, `connector`. The same selection is written as a credential-free structured runtime log so interest remains observable when custom event reporting is unavailable on the current Vercel plan.
+The interface uses staged disclosure instead of showing every integration at once:
+
+1. Choose wallet or exchange.
+2. Supply only the information required for that source. Exchange users choose the venue before seeing credential fields.
+3. Replace the setup flow with the result and provide one clear way to start over.
+
+This keeps each view focused on one decision, makes backtracking explicit, and prevents unavailable integrations from competing with the primary task.
 
 ## Security follow-ups before wider use
 

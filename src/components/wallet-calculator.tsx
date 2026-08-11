@@ -1,23 +1,15 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { track } from "@vercel/analytics";
 import type { PortfolioResponse } from "@/lib/types";
 
-type Source = "bitvavo" | "binance" | "wallet";
-type FutureConnector = "solana" | "bitcoin" | "kraken" | "coinbase" | "tron";
+type Flow = "choose" | "wallet" | "exchange" | "credentials";
+type Exchange = "bitvavo" | "binance";
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 const price = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 4 });
 const quantity = new Intl.NumberFormat("en-US", { maximumFractionDigits: 4 });
-const sourceNames: Record<Source, string> = { bitvavo: "Bitvavo", binance: "Binance", wallet: "EVM wallet" };
-const futureConnectors: Array<{ id: FutureConnector; name: string; detail: string }> = [
-  { id: "solana", name: "Solana", detail: "Wallet Standard" },
-  { id: "bitcoin", name: "Bitcoin", detail: "Public addresses" },
-  { id: "kraken", name: "Kraken", detail: "Read-only API" },
-  { id: "coinbase", name: "Coinbase", detail: "Exchange account" },
-  { id: "tron", name: "Tron", detail: "Public addresses" },
-];
+const exchangeNames: Record<Exchange, string> = { bitvavo: "Bitvavo", binance: "Binance" };
 
 function formatPrice(value: number) {
   if (value >= 0.01) return price.format(value);
@@ -29,26 +21,33 @@ function shortAddress(address: string) {
 }
 
 export function WalletCalculator() {
-  const [source, setSource] = useState<Source>("bitvavo");
+  const [flow, setFlow] = useState<Flow>("choose");
+  const [exchange, setExchange] = useState<Exchange | null>(null);
   const [address, setAddress] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [secret, setSecret] = useState("");
   const [result, setResult] = useState<PortfolioResponse | null>(null);
   const [error, setError] = useState("");
-  const [interestMessage, setInterestMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
-  function chooseSource(next: Source) {
-    setSource(next);
+  function navigate(next: Flow) {
+    setFlow(next);
+    setError("");
+  }
+
+  function reset() {
+    setFlow("choose");
+    setExchange(null);
+    setAddress("");
+    setApiKey("");
+    setSecret("");
     setResult(null);
     setError("");
-    setInterestMessage("");
   }
 
   async function requestPortfolio(endpoint: string, body: Record<string, string>) {
     setLoading(true);
     setError("");
-    setResult(null);
 
     try {
       const response = await fetch(endpoint, {
@@ -57,7 +56,7 @@ export function WalletCalculator() {
         body: JSON.stringify(body),
       });
       const responseBody = await response.json();
-      if (!response.ok) throw new Error(responseBody.error || "That portfolio refused to reveal its alternate timeline.");
+      if (!response.ok) throw new Error(responseBody.error || "We couldn’t read that portfolio.");
       setResult(responseBody);
       requestAnimationFrame(() => document.querySelector("#results")?.scrollIntoView({ behavior: "smooth", block: "start" }));
     } catch (caught) {
@@ -67,21 +66,22 @@ export function WalletCalculator() {
     }
   }
 
-  async function onSubmit(event: FormEvent) {
+  async function submitWallet(event: FormEvent) {
     event.preventDefault();
-    if (source === "wallet") {
-      await requestPortfolio("/api/portfolio", { address: address.trim() });
-      return;
-    }
+    await requestPortfolio("/api/portfolio", { address: address.trim() });
+  }
 
-    await requestPortfolio("/api/exchange", { exchange: source, apiKey: apiKey.trim(), secret: secret.trim() });
+  async function submitExchange(event: FormEvent) {
+    event.preventDefault();
+    if (!exchange) return;
+    await requestPortfolio("/api/exchange", { exchange, apiKey: apiKey.trim(), secret: secret.trim() });
     setApiKey("");
     setSecret("");
   }
 
   async function connectWallet() {
     if (!window.ethereum) {
-      setError("No EVM browser wallet found. Paste its public 0x address instead.");
+      setError("No compatible EVM wallet was found. You can paste its public address instead.");
       return;
     }
     try {
@@ -95,170 +95,141 @@ export function WalletCalculator() {
     }
   }
 
-  function registerInterest(connector: FutureConnector, name: string) {
-    track("connector_interest", { connector });
-    void fetch("/api/interest", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ connector }),
-      keepalive: true,
-    });
-    setInterestMessage(`${name} got your vote. We’ll use these clicks to choose what ships next.`);
+  if (result) {
+    return (
+      <section className="results" id="results" aria-live="polite">
+        <div className="results-heading">
+          <div>
+            <span className="overline">{result.source.kind === "wallet" ? shortAddress(result.address) : result.source.label}</span>
+            <h2>Your alternate timeline</h2>
+          </div>
+          <button className="text-button" type="button" onClick={reset}>Check another portfolio</button>
+        </div>
+
+        <div className="summary-grid">
+          <article>
+            <span>Value today</span>
+            <strong>{money.format(result.totals.current)}</strong>
+          </article>
+          <article className="highlight">
+            <span>At every ATH</span>
+            <strong>{money.format(result.totals.ath)}</strong>
+          </article>
+          <article>
+            <span>Difference</span>
+            <strong>+{money.format(result.totals.upside)}</strong>
+            <small>{result.totals.multiplier.toFixed(1)}× today’s value</small>
+          </article>
+        </div>
+
+        <p className="coverage">{result.note}</p>
+
+        <div className="asset-table" role="table" aria-label="Portfolio assets">
+          <div className="asset-row table-head" role="row">
+            <span>Asset</span><span>Holdings</span><span>Price now</span><span>ATH value</span>
+          </div>
+          {result.assets.map((asset) => (
+            <div className="asset-row" role="row" key={asset.id}>
+              <div className="token" role="cell">
+                <span className="token-icon">{asset.symbol.slice(0, 2)}</span>
+                <span className="token-name">{asset.name}<small>{asset.symbol}</small></span>
+              </div>
+              <span className="number" role="cell"><i>Holdings</i>{quantity.format(asset.amount)}</span>
+              <span className="number" role="cell"><i>Price now</i>{formatPrice(asset.currentPrice)}</span>
+              <strong className="number" role="cell"><i>ATH value</i>{money.format(asset.athValue)}</strong>
+            </div>
+          ))}
+        </div>
+      </section>
+    );
   }
 
-  const exchange = source !== "wallet";
-  const provider = sourceNames[source];
-
   return (
-    <div className="calculator">
-      <section className="source-picker" aria-labelledby="source-heading">
-        <div className="source-intro">
-          <span className="eyebrow">Choose where the damage lives</span>
-          <h2 id="source-heading">Start with your actual portfolio.</h2>
-        </div>
-        <div className="source-tabs" role="group" aria-label="Portfolio source">
-          {(["bitvavo", "binance", "wallet"] as Source[]).map((item) => (
-            <button
-              key={item}
-              className={`source-tab ${source === item ? "selected" : ""}`}
-              type="button"
-              aria-pressed={source === item}
-              onClick={() => chooseSource(item)}
-            >
-              <span className={`source-logo ${item}`}>{item === "bitvavo" ? "B" : item === "binance" ? "◆" : "↗"}</span>
-              <span>{sourceNames[item]}<small>{item === "wallet" ? "Public EVM address" : "Read-only API"}</small></span>
+    <section className="flow-card" aria-live="polite">
+      {flow === "choose" ? (
+        <div className="flow-step">
+          <span className="overline">Choose one</span>
+          <h2>Where is your crypto?</h2>
+          <p className="step-copy">We only show the setup needed for your choice.</p>
+          <div className="choice-list">
+            <button type="button" onClick={() => navigate("wallet")}>
+              <span className="choice-icon" aria-hidden="true">↗</span>
+              <span><strong>In a wallet</strong><small>Paste an address or connect a browser wallet</small></span>
+              <i aria-hidden="true">→</i>
             </button>
-          ))}
-        </div>
-      </section>
-
-      <form onSubmit={onSubmit} aria-label={`${provider} portfolio calculator`}>
-        <div className="form-topline">
-          <span>{exchange ? `Connect ${provider}` : "Check a public wallet"}</span>
-          <span className="network-status"><i /> {exchange ? "One-time read" : "Ethereum · live"}</span>
-        </div>
-
-        {exchange ? (
-          <>
-            <div className="credential-grid">
-              <label>
-                <span>API key</span>
-                <input value={apiKey} onChange={(event) => setApiKey(event.target.value)} autoComplete="off" spellCheck={false} required />
-              </label>
-              <label>
-                <span>API secret</span>
-                <input type="password" value={secret} onChange={(event) => setSecret(event.target.value)} autoComplete="new-password" required />
-              </label>
-              <button className="submit-button" disabled={loading} type="submit">
-                {loading ? "Reading balances…" : "Connect & calculate →"}
-              </button>
-            </div>
-            <div className="credential-note">
-              <span className="shield" aria-hidden="true">✓</span>
-              <p><strong>Read-only keys only.</strong> Credentials are sent over HTTPS, used once on the server, then discarded. Never enable trading or withdrawals.</p>
-              <a href={source === "bitvavo" ? "https://docs.bitvavo.com/docs/get-started/" : "https://www.binance.com/en/my/settings/api-management"} target="_blank" rel="noreferrer">How to create one ↗</a>
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="entry-panel">
-              <label htmlFor="wallet-address" className="sr-only">Ethereum wallet address</label>
-              <input
-                id="wallet-address"
-                className="address-input"
-                value={address}
-                onChange={(event) => setAddress(event.target.value)}
-                placeholder="Paste an Ethereum 0x address"
-                autoComplete="off"
-                spellCheck={false}
-                required
-              />
-              <button className="submit-button" disabled={loading} type="submit">
-                {loading ? "Calculating…" : "Let me suffer →"}
-              </button>
-            </div>
-            <div className="connect-row">
-              <button className="wallet-button" disabled={loading} type="button" onClick={connectWallet}>Connect any EVM wallet</button>
-              <span className="privacy-note">MetaMask, Rabby, Phantom EVM, and compatible providers.</span>
-            </div>
-          </>
-        )}
-        {error ? <p className="form-error" role="alert">{error}</p> : null}
-      </form>
-
-      <section className="coming-soon" aria-labelledby="coming-soon-heading">
-        <div>
-          <span className="eyebrow">Next up</span>
-          <h3 id="coming-soon-heading">What should we connect next?</h3>
-          <p>Tap one. The most wanted source moves up the list.</p>
-        </div>
-        <div className="future-grid">
-          {futureConnectors.map((connector) => (
-            <button key={connector.id} type="button" onClick={() => registerInterest(connector.id, connector.name)}>
-              <span>{connector.name}<small>{connector.detail}</small></span>
-              <i>Coming soon</i>
+            <button type="button" onClick={() => navigate("exchange")}>
+              <span className="choice-icon" aria-hidden="true">⇄</span>
+              <span><strong>On an exchange</strong><small>Connect Bitvavo or Binance with a read-only key</small></span>
+              <i aria-hidden="true">→</i>
             </button>
-          ))}
-        </div>
-        <p className="interest-message" aria-live="polite">{interestMessage}</p>
-      </section>
-
-      {loading ? (
-        <div className="loading" aria-live="polite">
-          <div className="loading-line" />
-          <p>Finding the version of you who sold the top…</p>
+          </div>
         </div>
       ) : null}
 
-      {result ? (
-        <section className="results" id="results" aria-live="polite">
-          <div className="results-header">
-            <div>
-              <p className="kicker">THE PAINFUL TRUTH FOR {result.source.kind === "wallet" ? shortAddress(result.address) : result.source.label.toUpperCase()}</p>
-              <h2>Your alternate timeline.</h2>
-            </div>
-            <button className="try-again" onClick={() => setResult(null)}>Try another source</button>
-          </div>
+      {flow === "wallet" ? (
+        <div className="flow-step">
+          <button className="back-button" type="button" onClick={() => navigate("choose")}>← Back</button>
+          <span className="overline">Wallet</span>
+          <h2>Use an Ethereum address</h2>
+          <p className="step-copy">Paste any public 0x address. Or ask a compatible browser wallet to share it.</p>
+          <form onSubmit={submitWallet}>
+            <label className="field">
+              <span>Public wallet address</span>
+              <input value={address} onChange={(event) => setAddress(event.target.value)} placeholder="0x…" autoComplete="off" spellCheck={false} required />
+            </label>
+            <button className="primary-button" disabled={loading} type="submit">{loading ? "Reading wallet…" : "Calculate"}</button>
+          </form>
+          <div className="or"><span>or</span></div>
+          <button className="secondary-button" disabled={loading} type="button" onClick={connectWallet}>Connect browser wallet</button>
+          <p className="microcopy">Works with MetaMask, Rabby, Phantom EVM, and other injected EVM providers.</p>
+          {error ? <p className="form-error" role="alert">{error}</p> : null}
+        </div>
+      ) : null}
 
-          <div className="result-grid">
-            <article className="result-card">
-              <span className="result-label">Tracked today</span>
-              <strong className="result-value">{money.format(result.totals.current)}</strong>
-              <span className="result-caption">Reality. Unnecessarily specific.</span>
-            </article>
-            <article className="result-card dream">
-              <span className="result-label">At every ATH</span>
-              <strong className="result-value">{money.format(result.totals.ath)}</strong>
-              <span className="result-caption">A beautiful, impossible coincidence.</span>
-            </article>
-            <article className="result-card pain">
-              <span className="result-label">Pain multiplier</span>
-              <strong className="result-value">{result.totals.multiplier.toFixed(1)}×</strong>
-              <span className="result-caption">That’s {money.format(result.totals.upside)} in character development.</span>
-            </article>
-          </div>
-
-          <p className="coverage">{result.note}</p>
-
-          <div className="asset-table" role="table" aria-label="Portfolio assets">
-            <div className="asset-row table-head" role="row">
-              <span>Asset</span><span>Holdings</span><span>Price now</span><span>ATH value</span>
-            </div>
-            {result.assets.map((asset) => (
-              <div className="asset-row" role="row" key={asset.id}>
-                <div className="token" role="cell">
-                  <span className="token-icon">{asset.symbol.slice(0, 2)}</span>
-                  <span className="token-name">{asset.name}<small className="token-symbol">{asset.symbol}</small></span>
-                </div>
-                <span className="number" role="cell"><i className="mobile-label">Holdings</i>{quantity.format(asset.amount)}</span>
-                <span className="number" role="cell"><i className="mobile-label">Price now</i>{formatPrice(asset.currentPrice)}</span>
-                <strong className="number" role="cell"><i className="mobile-label">ATH value</i>{money.format(asset.athValue)}</strong>
-              </div>
+      {flow === "exchange" ? (
+        <div className="flow-step">
+          <button className="back-button" type="button" onClick={() => navigate("choose")}>← Back</button>
+          <span className="overline">Exchange</span>
+          <h2>Choose your exchange</h2>
+          <p className="step-copy">You’ll create a read-only API key in the next step.</p>
+          <div className="choice-list compact">
+            {(["bitvavo", "binance"] as Exchange[]).map((item) => (
+              <button key={item} type="button" onClick={() => { setExchange(item); navigate("credentials"); }}>
+                <span className={`exchange-icon ${item}`}>{item === "bitvavo" ? "B" : "◆"}</span>
+                <span><strong>{exchangeNames[item]}</strong><small>Spot balances{item === "bitvavo" ? " and staking" : ""}</small></span>
+                <i aria-hidden="true">→</i>
+              </button>
             ))}
           </div>
-        </section>
+        </div>
       ) : null}
-    </div>
+
+      {flow === "credentials" && exchange ? (
+        <div className="flow-step">
+          <button className="back-button" type="button" onClick={() => navigate("exchange")}>← Exchanges</button>
+          <span className="overline">{exchangeNames[exchange]}</span>
+          <h2>Connect read-only access</h2>
+          <p className="step-copy">Create a key with read permissions only. Never enable trading or withdrawals.</p>
+          <form onSubmit={submitExchange}>
+            <label className="field">
+              <span>API key</span>
+              <input value={apiKey} onChange={(event) => setApiKey(event.target.value)} autoComplete="off" spellCheck={false} required />
+            </label>
+            <label className="field">
+              <span>API secret</span>
+              <input type="password" value={secret} onChange={(event) => setSecret(event.target.value)} autoComplete="new-password" required />
+            </label>
+            <button className="primary-button" disabled={loading} type="submit">{loading ? "Reading balances…" : "Connect and calculate"}</button>
+          </form>
+          <div className="security-note">
+            <span aria-hidden="true">✓</span>
+            <p>Used once over HTTPS, then discarded. We do not store your credentials.</p>
+          </div>
+          <a className="help-link" href={exchange === "bitvavo" ? "https://docs.bitvavo.com/docs/get-started/" : "https://www.binance.com/en/my/settings/api-management"} target="_blank" rel="noreferrer">How to create a read-only key ↗</a>
+          {error ? <p className="form-error" role="alert">{error}</p> : null}
+        </div>
+      ) : null}
+    </section>
   );
 }
 
