@@ -32,9 +32,19 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
+
+# local AI and editor tooling
+AGENTS.md
+CLAUDE.md
+.agents/
+.codex/
+.claude/
+.cursor/
+.openai/
 
 # typescript
 *.tsbuildinfo

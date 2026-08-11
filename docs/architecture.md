@@ -1,66 +1,66 @@
-# System design
+# System architecture
 
 ## Product boundary
 
-ATH, Again is a stateless, read-only portfolio calculator. The first-class sources are Bitvavo and Binance exchange balances, followed by public EVM wallets. The app never trades, withdraws, signs a transaction, stores an API credential, or requests a seed phrase or private key.
+ATH, Again is a stateless, read-only portfolio calculator. It does not trade, withdraw, sign transactions, request private keys, or persist exchange credentials.
 
-Exchange credentials are submitted over HTTPS to a Node.js route, held only in request memory, used to sign one balance lookup, and discarded when the request ends. Users must create a key with read permissions only. Persistent account linking would require authentication, encrypted secret storage, rotation and revocation UX, and is intentionally outside this prototype.
+Browser wallet connection is only an address-discovery mechanism. Holdings are always read from public chain infrastructure. Exchange keys are submitted over HTTPS to a Node.js route, held in request memory for one signed balance request, and discarded when that request finishes.
 
-## Request flow
+## Runtime flow
 
 ```text
 Browser
-  ├── Bitvavo/Binance read-only API key + secret
-  └── public EVM address
-             │
-             ▼
-Next.js routes on Vercel
-  ├── exchange adapter: sign request and normalize spot/staking balances
-  ├── EVM adapter: Blockscout ETH + ERC-20 balances
-  └── CoinGecko: current USD price, ATH and ATH date
-             │
-             ▼
-Normalized PortfolioResponse → counterfactual ATH result
+  ├── pasted Ethereum or Solana address
+  ├── EIP-6963 + Wallet Standard discovered accounts
+  └── one-time Bitvavo/Binance read-only credentials
+                    │
+                    ▼
+Next.js Node.js route handlers
+  ├── validate input and select source
+  ├── run independent chain adapters concurrently
+  └── tolerate partial chain-provider failure
+                    │
+                    ▼
+Provider adapters
+  ├── Ethereum: Blockscout ETH + ERC-20 balances
+  ├── Solana: JSON-RPC SOL + SPL/Token-2022 balances
+  ├── HyperEVM: JSON-RPC native HYPE balance
+  ├── Bitvavo: HMAC-signed spot/staking requests
+  └── Binance: HMAC-signed spot request
+                    │
+                    ▼
+Market data
+  ├── DEX Screener: batched Solana price discovery
+  └── CoinGecko: canonical identity, current USD price and ATH
+                    │
+                    ▼
+Normalized PortfolioResponse → client result view
 ```
 
-The exchange API route deliberately logs only the provider, timing, request ID and matched asset count. Credentials and request bodies never enter application logs or analytics.
+## Code boundaries
 
-## Provider-independent adapters
-
-The core boundary is a portfolio source, not a wallet brand. Every adapter produces the same normalized asset shape:
-
-```ts
-type Holding = {
-  symbol: string
-  amount: number
-  canonicalId?: string
-}
+```text
+src/
+  app/api/                  HTTP validation and response handling
+  components/               interaction flow and normalized result UI
+  lib/addresses.ts          pure address detection
+  lib/browser-wallets.ts    EIP-6963 and Wallet Standard discovery
+  lib/exchange.ts           authenticated exchange adapters
+  lib/portfolio.ts          multichain orchestration
+  lib/portfolio/
+    core.ts                 pricing enrichment and portfolio math
+    ethereum.ts             Ethereum/Blockscout adapter
+    solana.ts               Solana RPC and DEX Screener adapter
+    hyperevm.ts             HyperEVM native balance adapter
 ```
 
-- Exchange adapters authenticate against a venue and return its off-chain balances.
-- EVM adapters accept an EIP-1193 address regardless of whether MetaMask, Rabby, Coinbase Wallet or Phantom exposed it.
-- Future Solana support should use Wallet Standard and public addresses rather than a Phantom-only foundation.
-- Future Bitcoin support should accept public addresses/descriptors and use a UTXO indexer.
+Every source normalizes into `PortfolioAsset` and `PortfolioResponse`. This keeps provider-specific fields out of UI components and makes new chain adapters additive.
 
-Wallet connection is only address discovery. Portfolio discovery remains chain-specific because EVM token contracts, Solana token accounts and Bitcoin UTXOs use different data models.
+## Wallet standards
 
-## Current integrations
+EVM wallets are discovered with EIP-6963 and connected through EIP-1193. Solana wallets are discovered and connected through Wallet Standard. Entries with the same wallet name are presented as one choice, allowing a wallet such as Phantom to share both its EVM and Solana accounts without a Phantom-specific SDK.
 
-### Bitvavo
-
-`GET /v2/balance` supplies available and in-order spot balances. The adapter also attempts `GET /v2/stakingBalance`; unsupported or unpermitted staking reads do not fail the spot portfolio. Requests use Bitvavo's timestamped HMAC-SHA256 headers.
-
-### Binance
-
-`GET /api/v3/account` supplies free and locked spot balances. Requests use Binance's HMAC-SHA256 signed query and a `USER_DATA` API key. Trading permissions are unnecessary.
-
-### EVM wallets
-
-Pasted addresses and injected EIP-1193 providers share the existing Blockscout adapter. It is wallet-brand agnostic but currently indexes Ethereum only.
-
-## Pricing and identity
-
-Exchange balances expose symbols, not chain contract identifiers. The prototype queries CoinGecko markets for those symbols and selects the highest-market-cap match. This is practical for common assets but not tax-grade identity resolution; ambiguous or unmatched assets are disclosed in the result note.
+## Pricing model
 
 For every matched asset:
 
@@ -70,23 +70,22 @@ ATH value     = amount × max(historical USD ATH, current USD price)
 portfolio ATH = Σ ATH value
 ```
 
-Fiat, dust below $0.50 and unmatched assets are omitted. Token highs occurred on different dates, so the total is intentionally counterfactual rather than a historical portfolio snapshot.
+The maximum protects the estimate when a live price exceeds CoinGecko's cached ATH. Dust below $0.50, unpriced tokens, and assets without usable ATH data are omitted and disclosed in the result note.
 
-## Interaction model
+Exchange balances provide symbols rather than canonical contract identifiers. The exchange adapter selects the highest-market-cap CoinGecko match for each symbol, which is practical for a playful calculator but not suitable for accounting or tax use.
 
-The interface uses staged disclosure instead of showing every integration at once:
+## Failure model
 
-1. Choose one of three concrete actions: paste an address, connect a browser wallet, or connect an exchange.
-2. Pasted addresses reveal one field, browser wallets open immediately, and exchange users choose the venue before seeing credential fields.
-3. Replace the setup flow with the result and provide one clear way to start over.
+Independent wallet adapters run concurrently with `Promise.allSettled`. If one network provider fails while another succeeds, the app returns the available chains and discloses the partial failure. If every requested source fails, the most useful provider error is returned.
 
-This keeps each view focused on one decision, makes backtracking explicit, and prevents unavailable integrations from competing with the primary task.
+External requests have explicit timeouts. Market-data responses use bounded Next.js revalidation while account balances remain uncached.
 
-## Security follow-ups before wider use
+## Security posture
 
-- Add per-IP rate limiting and bot protection to credential and public-wallet routes.
-- Review exchange key IP allowlisting; dynamic serverless egress may require static egress infrastructure.
-- Add explicit request-size limits at the platform layer.
-- Never add trade or withdrawal endpoints to the credential-bearing adapter.
-- If persistent linking is added, require user authentication and envelope encryption backed by managed KMS.
-- Replace symbol-only matching with exchange asset metadata plus a curated canonical-ID registry.
+- Public-wallet requests contain addresses only.
+- Exchange request bodies are not logged or persisted.
+- Credentials are cleared from client state after the request.
+- Response headers disable framing, MIME sniffing, and unnecessary browser permissions.
+- CI runs linting, unit tests, TypeScript compilation, and the production build.
+
+Before wider use, add distributed rate limiting, bot protection, and static egress if exchange IP allowlisting becomes a requirement.
